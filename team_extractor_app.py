@@ -31,7 +31,7 @@ if uploaded_file:
 # --- Processing ---
 extracted_players = []
 
-# Words to ignore entirely after name
+# Words/positions to completely remove after name
 ignore_words = [
     "All-rounders", "Wicketkeepers", "Bowlers",
     "Forwards", "Defenders", "Goalkeepers", "Midfielders",
@@ -41,10 +41,9 @@ ignore_words = [
     "Power Forward", "PF", "Center", "C"
 ]
 
-# Optional countries to ignore if they appear after name
+# Countries to ignore
 ignore_countries = [
-    "Australia", "AUS", "Aus", "New Zealand", "NZ",
-    "United States", "America", "USA", "Canada",
+    "Australia", "AUS", "New Zealand", "NZ", "United States", "America", "USA", "Canada",
     "England", "South Africa", "India", "Pakistan", "Sri Lanka", "West Indies",
     "Bangladesh", "Afghanistan", "Ireland", "Scotland", "Netherlands", "Germany", "France",
     "Italy", "Spain", "Portugal", "Belgium", "Greece", "Turkey", "China", "Japan", "Korea",
@@ -59,27 +58,31 @@ if input_text:
         if not line:
             continue
 
-        # Skip headings
+        # Skip ignored headings
         if any(line.lower().startswith(h.lower()) for h in ignore_words):
             continue
 
-        # Remove leading "*" and spaces
+        # --- CLEAN LINE ---
+        # Remove leading '*' or whitespace
         line = re.sub(r"^[\*\s]+", "", line)
+        # Remove content inside parentheses
+        line = re.sub(r"\(.*?\)", "", line)
+        # Remove any known positions / countries after the name
+        for word in ignore_words + ignore_countries:
+            # Replace as separate word only
+            line = re.sub(rf"\b{re.escape(word)}\b", "", line)
 
-        # Extract leading number if present
+        # --- GET NUMBER ---
         num_match = re.match(r"^(\d+)", line)
         number = num_match.group(1) if num_match else ""
 
-        # Remove number for regex matching
-        line_no_number = re.sub(r"^\d+\s*", "", line)
+        # Remove the number for name extraction
+        line_no_number = re.sub(r"^\d+\s*", "", line).strip()
 
-        # Remove anything in parentheses
-        line_no_parens = re.sub(r"\s*[\(\[].*?[\)\]]", "", line_no_number)
-
-        # Regex to match 2+ capitalized words at the start (the player's name)
-        name_match = re.match(r"^([A-Z][a-zA-Z'`.-]+(?:\s[A-Z][a-zA-Z'`.-]+)+)", line_no_parens)
+        # Extract name: look for 2+ capitalized words
+        name_match = re.findall(r"[A-Z][a-zA-Z'`.-]+(?:\s[A-Z][a-zA-Z'`.-]+)+", line_no_number)
         if name_match:
-            name = name_match.group(1)
+            name = name_match[0].strip()
 
             # Append team text
             if team_text:
