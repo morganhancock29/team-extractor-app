@@ -28,6 +28,17 @@ if uploaded_file:
     image = Image.open(uploaded_file)
     input_text += "\n" + pytesseract.image_to_string(image)
 
+# --- Country list to ignore ---
+countries = [
+    "Australia", "United States", "New Zealand", "Netherlands", "South Sudan", 
+    "India", "England", "Canada", "South Africa", "Sri Lanka", "Bangladesh", 
+    "West Indies", "Ireland", "Scotland", "Zimbabwe", "Afghanistan", "Kenya", 
+    "Namibia", "UAE", "Oman", "Nepal", "Hong Kong", "Singapore", "Malaysia", 
+    "Thailand", "Japan", "China", "Fiji", "Germany", "Italy", "France", "Brazil", 
+    "Argentina", "Belgium", "Denmark", "Sweden", "Norway", "Finland", "Russia", 
+    "Poland", "Mexico", "USA", "Tanzania", "America", "AUS", "Aus", "NZ"
+]
+
 # --- Processing ---
 extracted_players = []
 
@@ -41,19 +52,31 @@ if input_text:
         # Remove starting "*" or other symbols
         line = re.sub(r"^[\*\s]+", "", line)
 
-        # Look for optional number at start
+        # Remove leading numbers or country names
+        tokens = line.split()
+        while tokens and (tokens[0].isdigit() or tokens[0] in countries):
+            tokens.pop(0)
+
+        # Skip empty lines after removal
+        if not tokens:
+            continue
+
+        # Optional: capture number at the very start (before popping)
         num_match = re.match(r"^(\d+)", line)
         number = num_match.group(1) if num_match else ""
 
-        # Remove the number for name detection
-        line_no_number = re.sub(r"^\d+\s*", "", line)
+        # Grab 2-3 capitalized words for name
+        name_tokens = []
+        for tok in tokens:
+            if tok[0].isupper():
+                name_tokens.append(tok)
+                if len(name_tokens) == 3:
+                    break
+            else:
+                break
 
-        # Regex: find sequences of 2+ capitalised words (First Last)
-        name_match = re.findall(r"[A-Z][a-zA-Z'`.-]+(?:\s[A-Z][a-zA-Z'`.-]+)+", line_no_number)
-        if name_match:
-            name = name_match[0]
-
-            # Append team text
+        if name_tokens:
+            name = " ".join(name_tokens)
             if team_text:
                 name += f" {team_text}"
 
