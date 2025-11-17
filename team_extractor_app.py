@@ -2,78 +2,94 @@
 
 import streamlit as st
 import pandas as pd
-import re
-from io import StringIO
 from PIL import Image
 import pytesseract
+import easyocr
+import io
 
-# ---- APP HEADER ----
+# ---- Set up pytesseract path for Streamlit Cloud ----
+pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
+
+st.set_page_config(page_title="Team Sheet Extractor", layout="wide")
 st.title("Team Sheet Extractor")
-st.markdown("""
-Paste a team sheet or upload an image, enter the team name once, and get a clean list of players.
-""")
 
-# ---- TEAM NAME INPUT ----
-team_name = st.text_input("Team name to append:")
+# --- Sidebar options ---
+st.sidebar.header("Options")
+team_name = st.sidebar.text_input("Enter team name:", "")
+show_numbers = st.sidebar.checkbox("Show numbers", value=True)
 
-# ---- NUMBER TOGGLE ----
-numbers_on = st.checkbox("Include player numbers", value=True)
+st.write("### Paste team sheet text or upload an image")
 
-# ---- INPUT OPTIONS ----
-st.subheader("Input options")
-input_option = st.radio("Select input type:", ("Paste text", "Upload image"))
+# --- Paste text area ---
+text_input = st.text_area("Paste your team sheet here:")
 
-player_text = ""
-if input_option == "Paste text":
-    player_text = st.text_area("Paste your team sheet here:")
+# --- Image upload ---
+uploaded_file = st.file_uploader("Or upload a team sheet image:", type=["png","jpg","jpeg","pdf"])
 
-elif input_option == "Upload image":
-    uploaded_file = st.file_uploader("Upload team sheet image", type=["png", "jpg", "jpeg"])
-    if uploaded_file is not None:
+extracted_text = ""
+
+# --- OCR for images ---
+if uploaded_file:
+    if uploaded_file.type == "application/pdf":
+        st.warning("PDF upload not supported yet. Please convert to image.")
+    else:
         image = Image.open(uploaded_file)
-        player_text = pytesseract.image_to_string(image)
-        st.text_area("Extracted text from image:", value=player_text, height=200)
+        # Using pytesseract for OCR
+        extracted_text = pytesseract.image_to_string(image)
 
-# ---- EXTRACTION FUNCTION ----
+# Use pasted text if no image OCR
+if text_input:
+    extracted_text = text_input
+
+# --- Process text ---
 def extract_players(text):
+    lines = text.split("\n")
     players = []
-    # Split lines and process each
-    for line in text.splitlines():
+    for line in lines:
         line = line.strip()
-        if not line:
+        if line == "":
             continue
-        # Match optional number at start
-        match = re.match(r'^(\d+)\s*[\|]?\s*(.+)', line)
-        if match:
-            number = match.group(1)
-            name = match.group(2)
+        # Split on whitespace, first part might be a number
+        parts = line.split()
+        if len(parts) == 0:
+            continue
+        # Check if first part is a number
+        if parts[0].isdigit():
+            number = parts[0]
+            name = " ".join(parts[1:])
         else:
             number = ""
-            name = line
-        # Clean name
-        name = re.sub(r'\s{2,}', ' ', name)  # replace multiple spaces
-        if numbers_on:
-            players.append(f"{number} | {name} of the {team_name}" if team_name else f"{number} | {name}")
-        else:
-            players.append(f"{name} of the {team_name}" if team_name else name)
+            name = " ".join(parts)
+        players.append((number, name))
     return players
 
-# ---- PROCESS BUTTON ----
-if st.button("Extract Team"):
-    if not player_text:
-        st.warning("Please provide input text or upload an image!")
-    else:
-        player_list = extract_players(player_text)
-        # Show results
-        st.subheader("Extracted Players")
-        st.text("\n".join(player_list))
-        
-        # Download as CSV
-        df = pd.DataFrame(player_list, columns=["Player"])
-        csv = df.to_csv(index=False)
-        st.download_button(
-            label="Download CSV",
-            data=csv,
-            file_name="team_sheet.csv",
-            mime="text/csv"
-        )
+players_list = extract_players(extracted_text)
+
+# --- Add team name ---
+def format_players(players, team, show_numbers=True):
+    formatted = []
+    for number, name in players:
+        if team != "":
+            name += f" of the {team}"
+        if show_numbers and number != "":
+            formatted.append(f"{number} | {name}")
+        else:
+            formatted.append(f"{name}")
+    return formatted
+
+if players_list:
+    formatted_list = format_players(players_list, team_name, show_numbers)
+    st.write("### Extracted Team Sheet")
+    st.text("\n".join(formatted_list))
+
+    # --- Download CSV ---
+    df = pd.DataFrame(formatted_list, columns=["Player"])
+    csv = df.to_csv(index=False)
+    st.download_button(
+        label="Download CSV",
+        data=csv,
+        file_name=f"{team_name}_team.csv",
+        mime="text/csv"
+    )
+else:
+    st.info("Paste some text or upload an image to see the team sheet.")
