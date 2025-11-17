@@ -31,24 +31,20 @@ if uploaded_file:
 # --- Processing ---
 extracted_players = []
 
-# Words to ignore entirely after name
+# Words to ignore (countries, positions, etc.)
 ignore_words = [
     "All-rounders", "Wicketkeepers", "Bowlers",
-    "Forwards", "Defenders", "Goalkeepers", "Midfielders",
     "Forward", "Defender", "Goalkeeper", "Midfielder",
-    # Basketball positions
-    "Point Guard", "PG", "Shooting Guard", "SG", "Small Forward", "SF",
-    "Power Forward", "PF", "Center", "C"
-]
-
-# Optional countries to ignore if they appear after name
-ignore_countries = [
-    "Australia", "AUS", "New Zealand", "NZ", "United States", "America", "USA", "Canada",
-    "England", "South Africa", "India", "Pakistan", "Sri Lanka", "West Indies",
-    "Bangladesh", "Afghanistan", "Ireland", "Scotland", "Netherlands", "Germany", "France",
-    "Italy", "Spain", "Portugal", "Belgium", "Greece", "Turkey", "China", "Japan", "Korea",
-    "Brazil", "Argentina", "Mexico", "Sweden", "Norway", "Denmark", "Finland", "Poland",
-    "Russia", "Ukraine", "Egypt", "Morocco", "Nigeria"
+    "Guard", "Center", "Centre", "F", "G", "C",
+    "Australia", "AUS", "Aus", "New Zealand", "NZ",
+    "United States", "America", "USA", "United Kingdom",
+    "England", "France", "Germany", "Italy", "Spain",
+    "Portugal", "Netherlands", "Brazil", "Argentina",
+    "China", "Japan", "South Korea", "South Africa",
+    "India", "Pakistan", "Bangladesh", "Sri Lanka",
+    "West Indies", "Ireland", "Scotland", "Belgium",
+    "Sweden", "Norway", "Finland", "Denmark", "Poland",
+    "Russia", "Ukraine", "Mexico", "Canada"
 ]
 
 if input_text:
@@ -58,37 +54,28 @@ if input_text:
         if not line:
             continue
 
-        # Skip ignored headings
-        if any(line.lower().startswith(h.lower()) for h in ignore_words):
-            continue
-
-        # Remove starting "*" or other symbols
+        # Remove starting "*" or whitespace
         line = re.sub(r"^[\*\s]+", "", line)
 
-        # Look for optional number at start
+        # Skip entire line if it matches any ignore words
+        if any(word.lower() in line.lower() for word in ignore_words):
+            continue
+
+        # Optional number at start
         num_match = re.match(r"^(\d+)", line)
         number = num_match.group(1) if num_match else ""
 
-        # Remove the number for name detection
+        # Remove number for name detection
         line_no_number = re.sub(r"^\d+\s*", "", line)
 
-        # Split line into words
-        words = line_no_number.split()
-        name_words = []
-
-        for word in words:
-            # Stop adding words if it's an ignore word or country
-            if word in ignore_words or word in ignore_countries:
-                break
-            # Stop if word starts with lowercase (likely position, stats, etc.)
-            if re.match(r"^[a-z]", word):
-                break
-            name_words.append(word)
-
+        # Regex: find sequences of 2+ capitalised words (First Last)
+        name_words = re.findall(r"[A-Z][a-zA-Z'`.-]+", line_no_number)
         if name_words:
+            # Remove words completely inside parentheses/brackets
+            name_words = [w for w in name_words if not re.match(r"^[\(\[].*?[\)\]]$", w)]
             name = " ".join(name_words)
 
-            # Append team text
+            # Append custom team text
             if team_text:
                 name += f" {team_text}"
 
