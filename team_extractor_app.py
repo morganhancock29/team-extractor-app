@@ -28,25 +28,28 @@ if uploaded_file:
     image = Image.open(uploaded_file)
     input_text += "\n" + pytesseract.image_to_string(image)
 
-# --- Lists to ignore ---
-ignore_lines = [
-    "All-rounders", "Wicketkeepers", "Bowlers",
-    "Forwards", "Defenders", "Goalkeepers", "Midfielders",
-    "Forward", "Defender", "Goalkeeper", "Midfielder"
-]
-
-ignore_countries = [
-    "Australia", "AUS", "United States", "America", "USA",
-    "New Zealand", "NZ", "South Africa", "England", "India",
-    "Pakistan", "Sri Lanka", "West Indies", "Bangladesh",
-    "Afghanistan", "Ireland", "Scotland", "Netherlands",
-    "Canada", "Germany", "France", "Italy", "Brazil",
-    "Argentina", "Spain", "Sweden", "Norway", "Denmark",
-    "Finland", "Japan", "China", "South Korea", "Russia"
-]
-
 # --- Processing ---
 extracted_players = []
+
+# Words to ignore entirely after name
+ignore_words = [
+    "All-rounders", "Wicketkeepers", "Bowlers",
+    "Forwards", "Defenders", "Goalkeepers", "Midfielders",
+    "Forward", "Defender", "Goalkeeper", "Midfielder",
+    # Basketball positions
+    "Point Guard", "PG", "Shooting Guard", "SG", "Small Forward", "SF",
+    "Power Forward", "PF", "Center", "C"
+]
+
+# Optional countries to ignore if they appear after name
+ignore_countries = [
+    "Australia", "AUS", "New Zealand", "NZ", "United States", "America", "USA", "Canada",
+    "England", "South Africa", "India", "Pakistan", "Sri Lanka", "West Indies",
+    "Bangladesh", "Afghanistan", "Ireland", "Scotland", "Netherlands", "Germany", "France",
+    "Italy", "Spain", "Portugal", "Belgium", "Greece", "Turkey", "China", "Japan", "Korea",
+    "Brazil", "Argentina", "Mexico", "Sweden", "Norway", "Denmark", "Finland", "Poland",
+    "Russia", "Ukraine", "Egypt", "Morocco", "Nigeria"
+]
 
 if input_text:
     lines = input_text.splitlines()
@@ -56,7 +59,7 @@ if input_text:
             continue
 
         # Skip ignored headings
-        if any(line.lower().startswith(h.lower()) for h in ignore_lines):
+        if any(line.lower().startswith(h.lower()) for h in ignore_words):
             continue
 
         # Remove starting "*" or other symbols
@@ -69,14 +72,21 @@ if input_text:
         # Remove the number for name detection
         line_no_number = re.sub(r"^\d+\s*", "", line)
 
-        # Remove any ignored countries from line
-        for country in ignore_countries:
-            line_no_number = re.sub(rf"\b{re.escape(country)}\b", "", line_no_number)
+        # Split line into words
+        words = line_no_number.split()
+        name_words = []
 
-        # Regex: find sequences of 2+ capitalised words (First Last)
-        name_match = re.findall(r"[A-Z][a-zA-Z'`.-]+(?:\s[A-Z][a-zA-Z'`.-]+)+", line_no_number)
-        if name_match:
-            name = name_match[0].strip()
+        for word in words:
+            # Stop adding words if it's an ignore word or country
+            if word in ignore_words or word in ignore_countries:
+                break
+            # Stop if word starts with lowercase (likely position, stats, etc.)
+            if re.match(r"^[a-z]", word):
+                break
+            name_words.append(word)
+
+        if name_words:
+            name = " ".join(name_words)
 
             # Append team text
             if team_text:
