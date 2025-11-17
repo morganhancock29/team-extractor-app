@@ -43,7 +43,8 @@ ignore_words = [
 
 # Optional countries to ignore if they appear after name
 ignore_countries = [
-    "Australia", "AUS", "New Zealand", "NZ", "United States", "America", "USA", "Canada",
+    "Australia", "AUS", "Aus", "New Zealand", "NZ",
+    "United States", "America", "USA", "Canada",
     "England", "South Africa", "India", "Pakistan", "Sri Lanka", "West Indies",
     "Bangladesh", "Afghanistan", "Ireland", "Scotland", "Netherlands", "Germany", "France",
     "Italy", "Spain", "Portugal", "Belgium", "Greece", "Turkey", "China", "Japan", "Korea",
@@ -58,35 +59,27 @@ if input_text:
         if not line:
             continue
 
-        # Skip ignored headings
+        # Skip headings
         if any(line.lower().startswith(h.lower()) for h in ignore_words):
             continue
 
-        # Remove starting "*" or other symbols
+        # Remove leading "*" and spaces
         line = re.sub(r"^[\*\s]+", "", line)
 
-        # Look for optional number at start
+        # Extract leading number if present
         num_match = re.match(r"^(\d+)", line)
         number = num_match.group(1) if num_match else ""
 
-        # Remove the number for name detection
+        # Remove number for regex matching
         line_no_number = re.sub(r"^\d+\s*", "", line)
 
-        # Split line into words
-        words = line_no_number.split()
-        name_words = []
+        # Remove anything in parentheses
+        line_no_parens = re.sub(r"\s*[\(\[].*?[\)\]]", "", line_no_number)
 
-        for word in words:
-            # Stop adding words if it's an ignore word or country
-            if word in ignore_words or word in ignore_countries:
-                break
-            # Stop if word starts with lowercase (likely position, stats, etc.)
-            if re.match(r"^[a-z]", word):
-                break
-            name_words.append(word)
-
-        if name_words:
-            name = " ".join(name_words)
+        # Regex to match 2+ capitalized words at the start (the player's name)
+        name_match = re.match(r"^([A-Z][a-zA-Z'`.-]+(?:\s[A-Z][a-zA-Z'`.-]+)+)", line_no_parens)
+        if name_match:
+            name = name_match.group(1)
 
             # Append team text
             if team_text:
