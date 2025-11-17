@@ -1,83 +1,89 @@
 import streamlit as st
-import pandas as pd
-from io import StringIO
-import re
-from PIL import Image
 import pytesseract
+from PIL import Image
+import re
+import io
+import csv
 
-# Configure pytesseract for Streamlit Cloud
+# OCR setup
 pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
 
-st.set_page_config(page_title="Team Sheet Cleaner", layout="wide")
-st.title("Team Sheet Cleaner")
+st.set_page_config(page_title="Team Sheet Extractor", layout="wide")
+st.title("Team Sheet Extractor")
 
-# Input options
-input_type = st.radio("Select input type:", ["Paste Text", "Upload Image"])
-raw_text = ""
+# --- Sidebar ---
+st.sidebar.header("Options")
+show_numbers = st.sidebar.checkbox("Include Numbers", value=True)
+team_text = st.sidebar.text_input("Text to append after player name", value="")
 
-if input_type == "Paste Text":
-    raw_text = st.text_area("Paste your team sheet here:")
+st.sidebar.markdown("---")
+st.sidebar.markdown("Paste team sheet text or upload an image below:")
 
-elif input_type == "Upload Image":
-    uploaded_file = st.file_uploader("Upload an image", type=["png","jpg","jpeg"])
-    if uploaded_file is not None:
-        image = Image.open(uploaded_file)
-        raw_text = pytesseract.image_to_string(image)
+# --- Input ---
+input_text = st.text_area("Paste team sheet here", height=250)
+uploaded_file = st.file_uploader("Or upload an image", type=["png", "jpg", "jpeg"])
 
-# Team name input
-team_name_input = st.text_input("Enter the text you want to appear after each player:")
+# --- Extract text from image if uploaded ---
+if uploaded_file:
+    image = Image.open(uploaded_file)
+    input_text += "\n" + pytesseract.image_to_string(image)
 
-# Numbers toggle
-show_numbers = st.checkbox("Include player numbers", value=True)
+# --- Processing ---
+extracted_players = []
 
-def extract_players_tabbed(text):
-    """
-    Extract only number + name from tab/space separated input.
-    Ignores everything else.
-    """
-    players = []
-    lines = text.splitlines()
+if input_text:
+    lines = input_text.splitlines()
     for line in lines:
         line = line.strip()
         if not line:
             continue
 
-        # Split by tabs first
-        parts = re.split(r'\t+', line)
-        if len(parts) >= 2:
-            number = parts[0].strip()
-            name = parts[1].strip()
+        # Remove starting "*" or other symbols
+        line = re.sub(r"^[\*\s]+", "", line)
 
-            # Remove any starting asterisks
-            number = number.lstrip('*').strip()
-            name = name.lstrip('*').strip()
+        # Look for optional number at start
+        num_match = re.match(r"^(\d+)", line)
+        number = num_match.group(1) if num_match else ""
 
-            if not show_numbers:
-                number = ""
+        # Remove the number for name detection
+        line_no_number = re.sub(r"^\d+\s*", "", line)
 
-            players.append({
-                "Number": number,
-                "Name": name,
-                "Team": team_name_input
-            })
-    return players
+        # Regex: find sequences of 2+ capitalised words (First Last)
+        name_match = re.findall(r"[A-Z][a-zA-Z'`.-]+(?:\s[A-Z][a-zA-Z'`.-]+)+", line_no_number)
+        if name_match:
+            name = name_match[0]
 
-if raw_text:
-    extracted = extract_players_tabbed(raw_text)
+            # Append team text
+            if team_text:
+                name += f" {team_text}"
 
-    if extracted:
-        df = pd.DataFrame(extracted)
-        st.subheader("Extracted Team Sheet")
-        st.dataframe(df)
+            if show_numbers and number:
+                extracted_players.append(f"{number} | {name}")
+            else:
+                extracted_players.append(name)
 
-        # CSV Export
-        csv_buffer = StringIO()
-        df.to_csv(csv_buffer, index=False)
-        st.download_button(
-            label="Download CSV",
-            data=csv_buffer.getvalue(),
-            file_name="team_sheet.csv",
-            mime="text/csv"
-        )
-    else:
-        st.warning("No players found in the input. Please check the formatting.")
+# --- Output ---
+if extracted_players:
+    st.subheader("Extracted Team Sheet")
+    st.text("\n".join(extracted_players))
+
+    # CSV download
+    output = io.StringIO()
+    writer = csv.writer(output)
+    for player in extracted_players:
+        if show_numbers and '|' in player:
+            number, name = map(str.strip, player.split('|', 1))
+        else:
+            number = ''
+            name = player
+        writer.writerow([number, name])
+    csv_data = output.getvalue()
+
+    st.download_button(
+        label="Download as CSV",
+        data=csv_data,
+        file_name="team.csv",
+        mime="text/csv"
+    )
+else:
+    st.info("No player names detected. Make sure your team sheet is pasted correctly or image is clear.")
