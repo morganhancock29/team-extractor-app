@@ -28,19 +28,22 @@ if uploaded_file:
     image = Image.open(uploaded_file)
     input_text += "\n" + pytesseract.image_to_string(image)
 
-# --- List of countries / terms to ignore ---
-countries = [
-    "Australia", "United States", "New Zealand", "Netherlands", "South Sudan",
-    "India", "England", "Canada", "South Africa", "Sri Lanka", "Bangladesh",
-    "West Indies", "Ireland", "Scotland", "Zimbabwe", "Afghanistan", "Kenya",
-    "Namibia", "UAE", "Oman", "Nepal", "Hong Kong", "Singapore", "Malaysia",
-    "Thailand", "Japan", "China", "Fiji", "Germany", "Italy", "France", "Brazil",
-    "Argentina", "Belgium", "Denmark", "Sweden", "Norway", "Finland", "Russia",
-    "Poland", "Mexico", "USA", "America", "AUS", "Aus", "NZ"
+# --- Lists to ignore ---
+ignore_lines = [
+    "All-rounders", "Wicketkeepers", "Bowlers",
+    "Forwards", "Defenders", "Goalkeepers", "Midfielders",
+    "Forward", "Defender", "Goalkeeper", "Midfielder"
 ]
 
-# Sort countries by length descending to remove multi-word countries first
-countries.sort(key=lambda x: len(x.split()), reverse=True)
+ignore_countries = [
+    "Australia", "AUS", "United States", "America", "USA",
+    "New Zealand", "NZ", "South Africa", "England", "India",
+    "Pakistan", "Sri Lanka", "West Indies", "Bangladesh",
+    "Afghanistan", "Ireland", "Scotland", "Netherlands",
+    "Canada", "Germany", "France", "Italy", "Brazil",
+    "Argentina", "Spain", "Sweden", "Norway", "Denmark",
+    "Finland", "Japan", "China", "South Korea", "Russia"
+]
 
 # --- Processing ---
 extracted_players = []
@@ -52,30 +55,30 @@ if input_text:
         if not line:
             continue
 
-        # Remove any * before or after number
-        line_clean = re.sub(r"^\*?\s*(\d+)\s*\*?\s*", r"\1 ", line)
+        # Skip ignored headings
+        if any(line.lower().startswith(h.lower()) for h in ignore_lines):
+            continue
 
-        # Extract optional number at the start
-        num_match = re.match(r"^(\d+)", line_clean)
+        # Remove starting "*" or other symbols
+        line = re.sub(r"^[\*\s]+", "", line)
+
+        # Look for optional number at start
+        num_match = re.match(r"^(\d+)", line)
         number = num_match.group(1) if num_match else ""
 
         # Remove the number for name detection
-        line_no_number = re.sub(r"^\d+\s*", "", line_clean)
+        line_no_number = re.sub(r"^\d+\s*", "", line)
 
-        # Remove all country names
-        for country in countries:
-            line_no_number = re.sub(rf"\b{re.escape(country)}\b", "", line_no_number, flags=re.IGNORECASE)
+        # Remove any ignored countries from line
+        for country in ignore_countries:
+            line_no_number = re.sub(rf"\b{re.escape(country)}\b", "", line_no_number)
 
-        line_no_number = line_no_number.strip()
-        if not line_no_number:
-            continue
-
-        # Capture first 2-3 capitalized words as player name
-        name_match = re.findall(r"[A-Z][a-zA-Z'`.-]+(?:\s[A-Z][a-zA-Z'`.-]+){0,2}", line_no_number)
+        # Regex: find sequences of 2+ capitalised words (First Last)
+        name_match = re.findall(r"[A-Z][a-zA-Z'`.-]+(?:\s[A-Z][a-zA-Z'`.-]+)+", line_no_number)
         if name_match:
-            name = name_match[0]
+            name = name_match[0].strip()
 
-            # Append team text if provided
+            # Append team text
             if team_text:
                 name += f" {team_text}"
 
