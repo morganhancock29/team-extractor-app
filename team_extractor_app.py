@@ -54,4 +54,57 @@ if input_text:
         # --- CLEAN LINE ---
         # Remove leading '*' or whitespace
         line = re.sub(r"^[\*\s]+", "", line)
-        # Remove content inside pa
+        # Remove content inside parentheses
+        line = re.sub(r"\(.*?\)", "", line)
+        # Remove any known positions / countries after the name
+        for word in ignore_words + ignore_countries:
+            line = re.sub(rf"\b{re.escape(word)}\b", "", line)
+        # Remove extra spaces
+        line = re.sub(r"\s{2,}", " ", line).strip()
+
+        # --- GET NUMBER ---
+        num_match = re.match(r"^(\d+)", line)
+        number = num_match.group(1) if num_match else ""
+
+        # Remove the number for name extraction
+        line_no_number = re.sub(r"^\d+\s*", "", line).strip()
+
+        # Extract name: look for 2+ capitalized words
+        name_match = re.findall(r"[A-Z][a-zA-Z'`.-]+(?:\s[A-Z][a-zA-Z'`.-]+)+", line_no_number)
+        if name_match:
+            name = name_match[0].strip()
+
+            # Append team text
+            if team_text:
+                name += f" {team_text}"
+
+            if show_numbers and number:
+                extracted_players.append(f"{number} | {name}")
+            else:
+                extracted_players.append(name)
+
+# --- Output ---
+if extracted_players:
+    st.subheader("Extracted Team Sheet")
+    st.text("\n".join(extracted_players))
+
+    # --- CSV download ---
+    output = io.StringIO()
+    writer = csv.writer(output)
+    for player in extracted_players:
+        if show_numbers and '|' in player:
+            number, name = map(str.strip, player.split('|', 1))
+        else:
+            number = ''
+            name = player
+        writer.writerow([number, name])
+    csv_data = output.getvalue()
+
+    st.download_button(
+        label="Download as CSV",
+        data=csv_data,
+        file_name="team.csv",
+        mime="text/csv"
+    )
+else:
+    st.info("No player names detected. Make sure your team sheet is pasted correctly.")
