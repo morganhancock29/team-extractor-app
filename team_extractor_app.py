@@ -31,7 +31,6 @@ if uploaded_file:
 # --- Processing ---
 extracted_players = []
 
-# Words to ignore (countries, positions, etc.)
 ignore_words = [
     "All-rounders", "Wicketkeepers", "Bowlers",
     "Forward", "Defender", "Goalkeeper", "Midfielder",
@@ -54,26 +53,25 @@ if input_text:
         if not line:
             continue
 
-        # Remove starting "*" or whitespace
-        line = re.sub(r"^[\*\s]+", "", line)
-
-        # Skip entire line if it matches any ignore words
-        if any(word.lower() in line.lower() for word in ignore_words):
-            continue
-
-        # Optional number at start
-        num_match = re.match(r"^(\d+)", line)
+        # Regex: optional * + optional number at start
+        num_match = re.match(r"^\*?\s*(\d+)?", line)
         number = num_match.group(1) if num_match else ""
 
-        # Remove number for name detection
-        line_no_number = re.sub(r"^\d+\s*", "", line)
+        # Remove number for name detection but keep leading *
+        line_no_number = re.sub(r"^\*?\s*\d+\s*", "", line)
 
-        # Regex: find sequences of 2+ capitalised words (First Last)
-        name_words = re.findall(r"[A-Z][a-zA-Z'`.-]+", line_no_number)
-        if name_words:
-            # Remove words completely inside parentheses/brackets
-            name_words = [w for w in name_words if not re.match(r"^[\(\[].*?[\)\]]$", w)]
-            name = " ".join(name_words)
+        # Remove any parentheses/brackets content
+        line_no_paren = re.sub(r"\s*[\(\[].*?[\)\]]", "", line_no_number)
+
+        # Split line into words
+        words = line_no_paren.split()
+
+        # Remove trailing ignore words (positions/countries)
+        while words and words[-1] in ignore_words:
+            words.pop()
+
+        if words:
+            name = " ".join(words)
 
             # Append custom team text
             if team_text:
