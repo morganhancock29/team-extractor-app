@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
-import re
 from io import StringIO
+import re
 from PIL import Image
 import pytesseract
 
@@ -9,12 +9,10 @@ import pytesseract
 pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
 
 st.set_page_config(page_title="Team Sheet Cleaner", layout="wide")
-
 st.title("Team Sheet Cleaner")
 
 # Input options
 input_type = st.radio("Select input type:", ["Paste Text", "Upload Image"])
-
 raw_text = ""
 
 if input_type == "Paste Text":
@@ -32,10 +30,10 @@ team_name_input = st.text_input("Enter the text you want to appear after each pl
 # Numbers toggle
 show_numbers = st.checkbox("Include player numbers", value=True)
 
-def extract_players(text):
+def extract_players_tabbed(text):
     """
-    Extracts player numbers and names only.
-    Ignores any country, dates, stats, etc.
+    Extract only number + name from tab/space separated input.
+    Ignores everything else.
     """
     players = []
     lines = text.splitlines()
@@ -44,35 +42,31 @@ def extract_players(text):
         if not line:
             continue
 
-        # Remove starting asterisks
-        line = re.sub(r'^\*+\s*', '', line)
+        # Split by tabs first
+        parts = re.split(r'\t+', line)
+        if len(parts) >= 2:
+            number = parts[0].strip()
+            name = parts[1].strip()
 
-        # Match number at start, followed by name (letters, spaces, hyphens, apostrophes)
-        match = re.match(r'(\d+)\s+([A-Za-zÀ-ÖØ-öø-ÿ \-\'\.]+)', line)
-        if match:
-            number = match.group(1)
-            name = match.group(2).strip()
-            players.append({"Number": number, "Name": name})
-        else:
-            # Try matching lines with only name and no number
-            match_name_only = re.match(r'([A-Za-zÀ-ÖØ-öø-ÿ \-\'\.]+)', line)
-            if match_name_only:
-                name = match_name_only.group(1).strip()
-                players.append({"Number": "", "Name": name})
+            # Remove any starting asterisks
+            number = number.lstrip('*').strip()
+            name = name.lstrip('*').strip()
+
+            if not show_numbers:
+                number = ""
+
+            players.append({
+                "Number": number,
+                "Name": name,
+                "Team": team_name_input
+            })
     return players
 
 if raw_text:
-    extracted = extract_players(raw_text)
-    
+    extracted = extract_players_tabbed(raw_text)
+
     if extracted:
-        # Add team name if provided
-        for player in extracted:
-            player["Team"] = f"{team_name_input}" if team_name_input else ""
-        
-        # Prepare DataFrame
         df = pd.DataFrame(extracted)
-        
-        # Show result
         st.subheader("Extracted Team Sheet")
         st.dataframe(df)
 
