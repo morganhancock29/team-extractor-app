@@ -28,16 +28,19 @@ if uploaded_file:
     image = Image.open(uploaded_file)
     input_text += "\n" + pytesseract.image_to_string(image)
 
-# --- Country list to ignore ---
+# --- List of countries / terms to ignore ---
 countries = [
-    "Australia", "United States", "New Zealand", "Netherlands", "South Sudan", 
-    "India", "England", "Canada", "South Africa", "Sri Lanka", "Bangladesh", 
-    "West Indies", "Ireland", "Scotland", "Zimbabwe", "Afghanistan", "Kenya", 
-    "Namibia", "UAE", "Oman", "Nepal", "Hong Kong", "Singapore", "Malaysia", 
-    "Thailand", "Japan", "China", "Fiji", "Germany", "Italy", "France", "Brazil", 
-    "Argentina", "Belgium", "Denmark", "Sweden", "Norway", "Finland", "Russia", 
-    "Poland", "Mexico", "USA", "Tanzania", "America", "AUS", "Aus", "NZ"
+    "Australia", "United States", "New Zealand", "Netherlands", "South Sudan",
+    "India", "England", "Canada", "South Africa", "Sri Lanka", "Bangladesh",
+    "West Indies", "Ireland", "Scotland", "Zimbabwe", "Afghanistan", "Kenya",
+    "Namibia", "UAE", "Oman", "Nepal", "Hong Kong", "Singapore", "Malaysia",
+    "Thailand", "Japan", "China", "Fiji", "Germany", "Italy", "France", "Brazil",
+    "Argentina", "Belgium", "Denmark", "Sweden", "Norway", "Finland", "Russia",
+    "Poland", "Mexico", "USA", "America", "AUS", "Aus", "NZ"
 ]
+
+# Sort countries by length descending to remove multi-word countries first
+countries.sort(key=lambda x: len(x.split()), reverse=True)
 
 # --- Processing ---
 extracted_players = []
@@ -49,34 +52,30 @@ if input_text:
         if not line:
             continue
 
-        # Remove starting "*" or other symbols
-        line = re.sub(r"^[\*\s]+", "", line)
+        # Remove any * before or after number
+        line_clean = re.sub(r"^\*?\s*(\d+)\s*\*?\s*", r"\1 ", line)
 
-        # Remove leading numbers or country names
-        tokens = line.split()
-        while tokens and (tokens[0].isdigit() or tokens[0] in countries):
-            tokens.pop(0)
-
-        # Skip empty lines after removal
-        if not tokens:
-            continue
-
-        # Optional: capture number at the very start (before popping)
-        num_match = re.match(r"^(\d+)", line)
+        # Extract optional number at the start
+        num_match = re.match(r"^(\d+)", line_clean)
         number = num_match.group(1) if num_match else ""
 
-        # Grab 2-3 capitalized words for name
-        name_tokens = []
-        for tok in tokens:
-            if tok[0].isupper():
-                name_tokens.append(tok)
-                if len(name_tokens) == 3:
-                    break
-            else:
-                break
+        # Remove the number for name detection
+        line_no_number = re.sub(r"^\d+\s*", "", line_clean)
 
-        if name_tokens:
-            name = " ".join(name_tokens)
+        # Remove all country names
+        for country in countries:
+            line_no_number = re.sub(rf"\b{re.escape(country)}\b", "", line_no_number, flags=re.IGNORECASE)
+
+        line_no_number = line_no_number.strip()
+        if not line_no_number:
+            continue
+
+        # Capture first 2-3 capitalized words as player name
+        name_match = re.findall(r"[A-Z][a-zA-Z'`.-]+(?:\s[A-Z][a-zA-Z'`.-]+){0,2}", line_no_number)
+        if name_match:
+            name = name_match[0]
+
+            # Append team text if provided
             if team_text:
                 name += f" {team_text}"
 
