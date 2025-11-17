@@ -53,30 +53,35 @@ if input_text:
         if not line:
             continue
 
-        # Regex: optional * + optional number at start
-        num_match = re.match(r"^\*?\s*(\d+)?", line)
+        # Remove leading symbols but keep the name intact
+        line = re.sub(r"^[\s]*", "", line)
+
+        # Extract optional number at start
+        num_match = re.match(r"^\*?\s*(\d+)", line)
         number = num_match.group(1) if num_match else ""
 
-        # Remove number for name detection but keep leading *
+        # Remove number and leading * for name detection
         line_no_number = re.sub(r"^\*?\s*\d+\s*", "", line)
 
-        # Remove any parentheses/brackets content
+        # Remove everything in parentheses
         line_no_paren = re.sub(r"\s*[\(\[].*?[\)\]]", "", line_no_number)
 
-        # Split line into words
-        words = line_no_paren.split()
+        # Extract first sequence of 2+ capitalized words (First Last)
+        name_match = re.match(r"([A-Z][a-zA-Z'`.-]+\s[A-Z][a-zA-Z'`.-]+(?:\s[A-Z][a-zA-Z'`.-]+)?)", line_no_paren)
+        if name_match:
+            name = name_match.group(1)
 
-        # Remove trailing ignore words (positions/countries)
-        while words and words[-1] in ignore_words:
-            words.pop()
-
-        if words:
-            name = " ".join(words)
+            # Remove trailing ignore words if accidentally captured
+            name_words = name.split()
+            while name_words and name_words[-1] in ignore_words:
+                name_words.pop()
+            name = " ".join(name_words)
 
             # Append custom team text
             if team_text:
                 name += f" {team_text}"
 
+            # Add number if needed
             if show_numbers and number:
                 extracted_players.append(f"{number} | {name}")
             else:
