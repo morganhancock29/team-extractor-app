@@ -1,7 +1,13 @@
 import streamlit as st
+import pytesseract
+from PIL import Image
 import re
 import io
 import csv
+from datetime import datetime
+
+# OCR setup
+pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
 
 st.set_page_config(page_title="Team Sheet Extractor", layout="wide")
 st.title("Team Sheet Extractor")
@@ -10,12 +16,13 @@ st.title("Team Sheet Extractor")
 st.sidebar.header("Options")
 show_numbers = st.sidebar.checkbox("Include Numbers", value=True)
 team_text = st.sidebar.text_input("Text to append after player name", value="")
+filename_input = st.sidebar.text_input("Filename for CSV (without .csv)", value="")
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("Paste team sheet text below:")
 
 # --- Input ---
-input_text = st.text_area("Paste team sheet here", height=400)
+input_text = st.text_area("Paste team sheet here", height=250)
 
 # --- Processing ---
 extracted_players = []
@@ -58,9 +65,8 @@ if input_text:
         line = re.sub(r"\(.*?\)", "", line)
         # Remove any known positions / countries after the name
         for word in ignore_words + ignore_countries:
+            # Replace as separate word only
             line = re.sub(rf"\b{re.escape(word)}\b", "", line)
-        # Remove extra spaces
-        line = re.sub(r"\s{2,}", " ", line).strip()
 
         # --- GET NUMBER ---
         num_match = re.match(r"^(\d+)", line)
@@ -88,7 +94,7 @@ if extracted_players:
     st.subheader("Extracted Team Sheet")
     st.text("\n".join(extracted_players))
 
-    # --- CSV download ---
+    # CSV download
     output = io.StringIO()
     writer = csv.writer(output)
     for player in extracted_players:
@@ -100,11 +106,18 @@ if extracted_players:
         writer.writerow([number, name])
     csv_data = output.getvalue()
 
+    # Determine filename
+    if filename_input.strip():
+        filename = f"{filename_input.strip()}.csv"
+    else:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"team_{timestamp}.csv"
+
     st.download_button(
         label="Download as CSV",
         data=csv_data,
-        file_name="team.csv",
+        file_name=filename,
         mime="text/csv"
     )
 else:
-    st.info("No player names detected. Make sure your team sheet is pasted correctly.")
+    st.info("No player names detected. Make sure your team sheet is pasted correctly or image is clear.")
