@@ -2,6 +2,7 @@ import streamlit as st
 import re
 import io
 import csv
+import unicodedata
 from datetime import datetime
 
 st.set_page_config(page_title="Team Sheet Extractor", layout="wide")
@@ -52,6 +53,11 @@ st.sidebar.markdown("Paste team sheet text below:")
 # --- Input ---
 input_text = st.text_area("Paste team sheet here", height=250)
 
+# --- Helper: Remove accents ---
+def remove_accents(input_str):
+    nfkd_form = unicodedata.normalize('NFD', input_str)
+    return "".join([c for c in nfkd_form if not unicodedata.combining(c)])
+
 # --- Processing ---
 extracted_players = []
 skipped_lines = []
@@ -90,7 +96,7 @@ if input_text:
 
         # Clean line
         line_clean = re.sub(r"^[\*\s]+", "", original_line)
-        # Remove parenthetical country tags (but keep text around them)
+        # Remove parenthetical country tags
         line_clean = re.sub(r"\(.*?\)", "", line_clean)
         for word in ignore_words + ignore_countries:
             line_clean = re.sub(rf"\b{re.escape(word)}\b", "", line_clean)
@@ -104,18 +110,19 @@ if input_text:
             number = numbers_in_line[0] if len(numbers_in_line) > 0 else ""
             line_no_number = re.sub(r"^\d+\s*", "", line_clean).strip()
 
+        # Remove leading 3-letter all-caps country codes
+        line_no_number = re.sub(r"^[A-Z]{3}\b\s*", "", line_no_number).strip()
+
+        # Normalize accented characters
+        line_no_number = remove_accents(line_no_number)
+
         # Prepend number prefix if any
         if number and number_prefix:
             number = f"{number_prefix}{number}"
 
-        # Remove position codes
         line_no_number = re.sub(r"^(GK|DF|MF|FW)\b", "", line_no_number).strip()
 
-        # --- NEW: Remove leading 3-letter ALL-CAPS country codes like "ESP", "MAS", "ARG" ---
-        # This matches exactly three uppercase letters at the start of the line followed by a word boundary.
-        line_no_number = re.sub(r"^[A-Z]{3}\b\s*", "", line_no_number).strip()
-
-        # Capitalize first word for parsing (only for matching)
+        # Capitalize first word for parsing
         line_parsed = line_no_number
         if line_parsed and line_parsed[0].islower():
             line_parsed = line_parsed[0].upper() + line_parsed[1:]
@@ -130,43 +137,33 @@ if input_text:
         match = multi_name_regex.search(line_parsed)
         if match:
             name = match.group().strip()
-            # If we captured only a single word (unexpected), set to single-word logic
             name_words = name.split()
         else:
             match_single = single_name_regex.search(line_parsed)
             name = match_single.group().strip() if match_single else None
             name_words = name.split() if name else []
 
-        # If name was found but is single word while original has a lowercase last token,
-        # flag that we only captured first name because last name lacked capital.
+        # Flag partial captures due to lowercase last name
         if name and len(name_words) == 1:
-            # Look at original_line tokens after removing leading numbers
             after_num = re.sub(r"^\s*\d+\s*", "", original_line).strip()
             tokens = after_num.split()
             if len(tokens) >= 2:
-                # if second token is all-lowercase (or starts lowercase) assume that's why it was missed
                 second = tokens[1]
                 if second and second[0].islower():
                     reason = "Last name not capitalised — only first name captured"
                     potential_issues.append((original_line, reason))
 
-        # If no name, create a helpful explanation
+        # If no name, create helpful explanation
         if not name:
             reason = None
-            # Remove leading number for inspection
             after_num = re.sub(r"^\s*\d+\s*", "", original_line).strip()
             tokens = after_num.split()
-
-            # If first token starts lowercase -> first name not capitalised
             if tokens and tokens[0] and tokens[0][0].islower():
                 reason = "First name not capitalised"
-            # Else if there's a second token and it's lowercase -> last name not capitalised
             elif len(tokens) >= 2 and tokens[1] and tokens[1][0].islower():
                 reason = "Last name not capitalised"
-            # Else if single token and too short
             elif len(tokens) == 1 and len(tokens[0]) < 4:
                 reason = "Single-word name too short"
-            # Else if digits appear after the first token (dates mid-line) they may interfere
             elif re.search(r"\b\d{1,2}[-/]\d{1,2}[-/]\d{2,4}\b", original_line) or re.search(r"\b\d{2,4}\b", " ".join(tokens[1:])):
                 reason = "Numbers or dates mid-line may have interfered"
             else:
