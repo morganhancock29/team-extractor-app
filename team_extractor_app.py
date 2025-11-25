@@ -96,12 +96,11 @@ if input_text:
 
         # Clean line
         line_clean = re.sub(r"^[\*\s]+", "", original_line)
-        # Remove parenthetical country tags
         line_clean = re.sub(r"\(.*?\)", "", line_clean)
         for word in ignore_words + ignore_countries:
             line_clean = re.sub(rf"\b{re.escape(word)}\b", "", line_clean)
 
-        # Extract number
+        # Extract numbers
         numbers_in_line = re.findall(r"\d+", line_clean)
         if skip_left_column:
             number = numbers_in_line[1] if len(numbers_in_line) > 1 else ""
@@ -110,8 +109,8 @@ if input_text:
             number = numbers_in_line[0] if len(numbers_in_line) > 0 else ""
             line_no_number = re.sub(r"^\d+\s*", "", line_clean).strip()
 
-        # Remove leading 3-letter all-caps country codes
-        line_no_number = re.sub(r"^[A-Z]{3}\b\s*", "", line_no_number).strip()
+        # Remove leading 3-letter uppercase country code if present
+        line_no_number = re.sub(r"^(?:[A-Z]{3})\b\s*", "", line_no_number)
 
         # Normalize accented characters
         line_no_number = remove_accents(line_no_number)
@@ -120,10 +119,10 @@ if input_text:
         if number and number_prefix:
             number = f"{number_prefix}{number}"
 
-        # Remove position abbreviations like GK, DF, MF, FW
+        # Remove position abbreviations
         line_no_number = re.sub(r"^(GK|DF|MF|FW)\b", "", line_no_number).strip()
 
-        # Capitalize first word for parsing (only for matching)
+        # Capitalize first word for parsing
         line_parsed = line_no_number
         if line_parsed and line_parsed[0].islower():
             line_parsed = line_parsed[0].upper() + line_parsed[1:]
@@ -132,7 +131,6 @@ if input_text:
         multi_name_regex = re.compile(
             rf"[A-Z][a-zA-Z'`.-]+(?:\s{prefix_pattern}\s?[A-Z][a-zA-Z'`.-]+)+"
         )
-        # Single-word ≥4 letters
         single_name_regex = re.compile(r"\b[A-Z][a-zA-Z'`.-]{3,}\b")
 
         match = multi_name_regex.search(line_parsed)
@@ -159,7 +157,6 @@ if input_text:
             reason = None
             after_num = re.sub(r"^\s*\d+\s*", "", original_line).strip()
             tokens = after_num.split()
-
             if tokens and tokens[0] and tokens[0][0].islower():
                 reason = "First name not capitalised"
             elif len(tokens) >= 2 and tokens[1] and tokens[1][0].islower():
@@ -183,14 +180,11 @@ if extracted_players:
     st.subheader("Extracted Team Sheet")
     st.text("\n".join([f"{num}\t{name}" if include_numbers and num else name for num, name in extracted_players]))
 
-    # -------------------------
-    # POSSIBLE ERRORS SECTION
-    # -------------------------
+    # Possible errors section
     if potential_issues:
         st.markdown("### ⚠️ Possible Errors Detected")
         explanations = [f"{line}  — {reason}" for line, reason in potential_issues]
         st.text("\n".join(explanations))
-    # -------------------------
 
     if file_name_input.strip():
         base_filename = file_name_input.strip()
