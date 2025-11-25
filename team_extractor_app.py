@@ -108,7 +108,12 @@ if input_text:
         if number and number_prefix:
             number = f"{number_prefix}{number}"
 
+        # Remove position codes
         line_no_number = re.sub(r"^(GK|DF|MF|FW)\b", "", line_no_number).strip()
+
+        # --- NEW: Remove leading 3-letter ALL-CAPS country codes like "ESP", "MAS", "ARG" ---
+        # This matches exactly three uppercase letters at the start of the line followed by a word boundary.
+        line_no_number = re.sub(r"^[A-Z]{3}\b\s*", "", line_no_number).strip()
 
         # Capitalize first word for parsing (only for matching)
         line_parsed = line_no_number
