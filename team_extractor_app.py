@@ -18,9 +18,6 @@ file_name_input = st.sidebar.text_input("Filename (optional)", value="")
 # Download format dropdown
 file_format = st.sidebar.selectbox("Download format", ["CSV (aText)", "TSV (PhotoMechanic)"])
 
-# Checkbox to skip left column
-skip_left_column = st.sidebar.checkbox("Skip left column of numbers", value=False)
-
 # FAQ box
 st.sidebar.markdown("---")
 st.sidebar.markdown("""
@@ -38,11 +35,6 @@ Check the **Skipped Lines** section below.
 - **CSV (aText)** is recommended for aText  
 - **TSV (PhotoMechanic)** preserves spacing and special characters for PhotoMechanic
 
-**Skip left column**  
-If your sheet includes row numbers like:  
-`1 26 Taylor Smith`  
-turn ON this option to ignore the first number.
-
 **Number Prefix**  
 If you want to prepend a string before the number (e.g., `a1`, `b2`), type it in the box above.
 """)
@@ -52,11 +44,6 @@ st.sidebar.markdown("Paste team sheet text below:")
 
 # --- Input ---
 input_text = st.text_area("Paste team sheet here", height=250)
-
-# Function to remove accents
-def remove_accents(input_str):
-    nfkd_form = unicodedata.normalize('NFKD', input_str)
-    return "".join([c for c in nfkd_form if not unicodedata.combining(c)])
 
 # --- Processing ---
 extracted_players = []
@@ -71,17 +58,29 @@ ignore_words = [
     "Power Forward", "PF", "Center", "C"
 ]
 
-ignore_countries = [
-    "Australia", "AUS", "New Zealand", "NZ", "United States", "America", "USA", "Canada",
-    "England", "South Africa", "India", "Pakistan", "Sri Lanka", "West Indies",
-    "Bangladesh", "Afghanistan", "Ireland", "Scotland", "Netherlands", "Germany", "France",
-    "Italy", "Spain", "Portugal", "Belgium", "Greece", "Turkey", "China", "Japan", "Korea",
-    "Brazil", "Argentina", "Mexico", "Sweden", "Norway", "Denmark", "Finland", "Poland",
-    "Russia", "Ukraine", "Egypt", "Morocco", "Nigeria"
-]
-
 surname_prefixes = ["de", "van", "von", "da", "del", "di", "du", "la", "le", "Mac", "Mc", "van der", "van den", "der"]
 prefix_pattern = r"(?:van der|van den|de|van|von|da|del|di|du|la|le|Mac|Mc|der)?"
+
+# Common 3-letter country codes to skip
+country_codes = {
+    "AFG","ALG","ARG","AUS","AUT","BEL","BRA","CAN","CHN","COL",
+    "CRO","CZE","DEN","EGY","ENG","ESP","EST","ETH","FIN","FRA",
+    "GER","GHA","GRC","HUN","INA","IRL","IRN","ISR","ITA","JAM",
+    "JPN","KOR","MAR","MEX","MLI","NED","NGA","NOR","NZL","PAN",
+    "PER","PHI","POL","POR","ROU","RUS","SAU","SCO","SEN","SRB",
+    "SVK","SWE","SUI","TUN","TUR","UKR","URU","USA","VEN","WAL",
+    "ZAF","MAS","AZE","BOL","BUL","CHI","CMR","CIV","CYP","DOM",
+    "ECU","ERI","GAB","GEO","GUI","HON","HKG","ISL","JOR","KEN",
+    "KSA","KAZ","KUW","LAO","LAT","LTU","LUX","MAD","MNE","NAM",
+    "NCA","NEP","NIG","OMA","PAR","PLE","RSA","RWA","SIN","SLO",
+    "SOM","SWZ","TJK","TKM","TLS","TOG","TPE","UAE","UGA","UZB",
+    "VIE","ZAM","ZIM"
+}
+
+def remove_accents(input_str):
+    """Convert accented characters to ASCII equivalents"""
+    nfkd_form = unicodedata.normalize('NFKD', input_str)
+    return "".join([c for c in nfkd_form if not unicodedata.combining(c)])
 
 if input_text:
     lines = input_text.splitlines()
@@ -97,32 +96,28 @@ if input_text:
         # Clean line
         line_clean = re.sub(r"^[\*\s]+", "", original_line)
         line_clean = re.sub(r"\(.*?\)", "", line_clean)
-        for word in ignore_words + ignore_countries:
-            line_clean = re.sub(rf"\b{re.escape(word)}\b", "", line_clean)
 
-        # Extract numbers
+        # Remove accents
+        line_clean = remove_accents(line_clean)
+
+        # Remove 3-letter country code if it appears at start of line
+        tokens = line_clean.split()
+        if tokens and tokens[0].upper() in country_codes:
+            tokens = tokens[1:]
+        line_clean = " ".join(tokens)
+
+        # Extract number
         numbers_in_line = re.findall(r"\d+", line_clean)
-        if skip_left_column:
-            number = numbers_in_line[1] if len(numbers_in_line) > 1 else ""
-            line_no_number = re.sub(r"^\d+\s+\d+\s*", "", line_clean).strip()
-        else:
-            number = numbers_in_line[0] if len(numbers_in_line) > 0 else ""
-            line_no_number = re.sub(r"^\d+\s*", "", line_clean).strip()
-
-        # Remove leading 3-letter uppercase country code if present
-        line_no_number = re.sub(r"^(?:[A-Z]{3})\b\s*", "", line_no_number)
-
-        # Normalize accented characters
-        line_no_number = remove_accents(line_no_number)
+        number = numbers_in_line[0] if len(numbers_in_line) > 0 else ""
+        line_no_number = re.sub(r"^\d+\s*", "", line_clean).strip()
 
         # Prepend number prefix if any
         if number and number_prefix:
             number = f"{number_prefix}{number}"
 
-        # Remove position abbreviations
         line_no_number = re.sub(r"^(GK|DF|MF|FW)\b", "", line_no_number).strip()
 
-        # Capitalize first word for parsing
+        # Capitalize first word for parsing (only for matching)
         line_parsed = line_no_number
         if line_parsed and line_parsed[0].islower():
             line_parsed = line_parsed[0].upper() + line_parsed[1:]
@@ -131,6 +126,7 @@ if input_text:
         multi_name_regex = re.compile(
             rf"[A-Z][a-zA-Z'`.-]+(?:\s{prefix_pattern}\s?[A-Z][a-zA-Z'`.-]+)+"
         )
+        # Single-word ≥4 letters
         single_name_regex = re.compile(r"\b[A-Z][a-zA-Z'`.-]{3,}\b")
 
         match = multi_name_regex.search(line_parsed)
@@ -142,32 +138,18 @@ if input_text:
             name = match_single.group().strip() if match_single else None
             name_words = name.split() if name else []
 
-        # Flag potential issues for missing last name capitalization
+        # Check for last name not capitalized
         if name and len(name_words) == 1:
             after_num = re.sub(r"^\s*\d+\s*", "", original_line).strip()
-            tokens = after_num.split()
-            if len(tokens) >= 2:
-                second = tokens[1]
+            tokens_orig = after_num.split()
+            if len(tokens_orig) >= 2:
+                second = tokens_orig[1]
                 if second and second[0].islower():
                     reason = "Last name not capitalised — only first name captured"
                     potential_issues.append((original_line, reason))
 
-        # If no name, create helpful explanation
         if not name:
-            reason = None
-            after_num = re.sub(r"^\s*\d+\s*", "", original_line).strip()
-            tokens = after_num.split()
-            if tokens and tokens[0] and tokens[0][0].islower():
-                reason = "First name not capitalised"
-            elif len(tokens) >= 2 and tokens[1] and tokens[1][0].islower():
-                reason = "Last name not capitalised"
-            elif len(tokens) == 1 and len(tokens[0]) < 4:
-                reason = "Single-word name too short"
-            elif re.search(r"\b\d{1,2}[-/]\d{1,2}[-/]\d{2,4}\b", original_line) or re.search(r"\b\d{2,4}\b", " ".join(tokens[1:])):
-                reason = "Numbers or dates mid-line may have interfered"
-            else:
-                reason = "Unusual format — name could not be parsed"
-
+            reason = "Unusual format — name could not be parsed"
             potential_issues.append((original_line, reason))
             skipped_lines.append(original_line)
         else:
@@ -180,11 +162,14 @@ if extracted_players:
     st.subheader("Extracted Team Sheet")
     st.text("\n".join([f"{num}\t{name}" if include_numbers and num else name for num, name in extracted_players]))
 
-    # Possible errors section
+    # -------------------------
+    # POSSIBLE ERRORS SECTION
+    # -------------------------
     if potential_issues:
         st.markdown("### ⚠️ Possible Errors Detected")
         explanations = [f"{line}  — {reason}" for line, reason in potential_issues]
         st.text("\n".join(explanations))
+    # -------------------------
 
     if file_name_input.strip():
         base_filename = file_name_input.strip()
